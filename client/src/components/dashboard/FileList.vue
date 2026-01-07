@@ -152,9 +152,9 @@
         </div>
 
         <!-- Actions Menu -->
-        <div class="opacity-0 group-hover:opacity-100 transition-opacity relative">
+        <div class="opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            @click.stop="toggleMenu(file.id)"
+            @click.stop="showMenu = file.id"
             class="p-1 hover:bg-accent rounded"
           >
             <MoreVertical class="h-4 w-4" />
@@ -163,10 +163,7 @@
           <!-- Dropdown Menu -->
           <div
             v-if="showMenu === file.id"
-            :class="[
-              'absolute right-0 z-50 w-48 bg-card border border-border rounded-md shadow-lg',
-              isLastItemInGrid(file) ? 'bottom-full mb-1' : 'top-full mt-1'
-            ]"
+            class="absolute right-0 top-8 z-50 w-48 bg-card border border-border rounded-md shadow-lg"
             @click.stop
           >
             <button
@@ -283,7 +280,7 @@
             <td class="px-4 py-3 text-right">
               <div class="relative">
                 <button
-                  @click.stop="toggleMenu(file.id, $event)"
+                  @click.stop="showMenu = file.id"
                   class="p-1 hover:bg-accent rounded"
                 >
                   <MoreVertical class="h-4 w-4" />
@@ -293,16 +290,9 @@
                 <div
                   v-if="showMenu === file.id"
                   :class="[
-                    'z-[100] w-48 bg-card border border-border rounded-md shadow-lg',
-                    menuPosition.isFixed && isLastItem(file) 
-                      ? 'fixed' 
-                      : 'absolute right-0',
-                    !menuPosition.isFixed && isLastItem(file) ? 'bottom-full mb-1' : '',
-                    !menuPosition.isFixed && !isLastItem(file) ? 'top-full mt-1' : ''
+                    'absolute right-0 z-50 w-48 bg-card border border-border rounded-md shadow-lg',
+                    isLastItem(file) ? 'bottom-full mb-1' : 'top-full mt-1'
                   ]"
-                  :style="menuPosition.isFixed && isLastItem(file) 
-                    ? { left: menuPosition.x + 'px', top: menuPosition.y + 'px' }
-                    : {}"
                   @click.stop
                 >
                   <button
@@ -358,6 +348,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { apiConfig } from '@/config';
 import {
   Folder,
   File,
@@ -407,7 +398,6 @@ const draggedFileId = ref(null);
 const dragOverFolderId = ref(null);
 const selectedFileIds = ref(new Set());
 const showMenu = ref(null);
-const menuPosition = ref({ x: 0, y: 0, isFixed: false });
 const contextMenu = ref({ show: false, x: 0, y: 0, file: null });
 const contextMenuRef = ref(null);
 
@@ -564,9 +554,8 @@ const getFileIconColor = (file) => {
 const getThumbnailUrl = (file) => {
   if (file.type === 'file' && file.mimeType?.startsWith('image/')) {
     const token = localStorage.getItem('auth_token');
-    const BASE_URL = import.meta.env.VITE_API_URL || '/api';
     // Incluir token na query string para preview
-    return `${BASE_URL}/files/${file.id}?preview=true${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+    return `${apiConfig.baseURL}/files/${file.id}?preview=true${token ? `&token=${encodeURIComponent(token)}` : ''}`;
   }
   return null;
 };
@@ -616,40 +605,6 @@ const handleImageError = (e) => {
 const isLastItem = (file) => {
   const index = props.files.findIndex(f => f.id === file.id);
   return index === props.files.length - 1;
-};
-
-// Verificar se é um dos últimos itens na visualização grid (últimas 2 linhas)
-const isLastItemInGrid = (file) => {
-  const index = props.files.findIndex(f => f.id === file.id);
-  const totalItems = props.files.length;
-  // Se estiver nos últimos 4 itens, pode precisar abrir para cima
-  return index >= totalItems - 4;
-};
-
-// Toggle do menu dropdown
-const toggleMenu = (fileId, event = null) => {
-  if (showMenu.value === fileId) {
-    showMenu.value = null;
-    menuPosition.value = { x: 0, y: 0, isFixed: false };
-  } else {
-    showMenu.value = fileId;
-    
-    // Se for o último item na visualização de lista, usar posição fixa
-    const file = props.files.find(f => f.id === fileId);
-    if (file && isLastItem(file) && viewMode.value === 'list' && event) {
-      const button = event.currentTarget;
-      const rect = button.getBoundingClientRect();
-      const menuHeight = 100; // Altura aproximada do menu (2 botões + espaçamento)
-      
-      menuPosition.value = {
-        x: rect.right - 192, // 192px = largura do menu (w-48 = 12rem = 192px)
-        y: rect.top - menuHeight - 4, // Posicionar acima do botão com margem
-        isFixed: true
-      };
-    } else {
-      menuPosition.value = { x: 0, y: 0, isFixed: false };
-    }
-  }
 };
 
 // Função para obter nome simplificado do tipo de arquivo
@@ -869,13 +824,11 @@ const handlePaste = async (folderId) => {
 
 const handleDownload = (file) => {
   showMenu.value = null;
-  menuPosition.value = { x: 0, y: 0, isFixed: false };
   emit('download', file);
 };
 
 const handleDelete = (file) => {
   showMenu.value = null;
-  menuPosition.value = { x: 0, y: 0, isFixed: false };
   emit('delete', file);
 };
 
@@ -904,29 +857,7 @@ let keydownHandler = null;
 onMounted(() => {
   // Usar setTimeout para evitar que o evento de clique imediato feche o menu
   clickHandler = (e) => {
-    setTimeout(() => {
-      closeContextMenu(e);
-      // Fechar menu dropdown se clicar fora
-      if (showMenu.value) {
-        // Verificar se o clique foi no botão do menu (ícone MoreVertical)
-        const clickedButton = e.target.closest('button');
-        const isMenuButton = clickedButton && (
-          clickedButton.querySelector('svg') || 
-          clickedButton.querySelector('.lucide-more-vertical') ||
-          e.target.closest('.lucide-more-vertical')
-        );
-        
-        // Verificar se o clique foi dentro do menu dropdown (absolute ou fixed)
-        const clickedMenu = e.target.closest('.z-\\[100\\]') || 
-                           e.target.closest('.absolute.right-0.z-50') ||
-                           e.target.closest('.fixed');
-        
-        if (!isMenuButton && !clickedMenu) {
-          showMenu.value = null;
-          menuPosition.value = { x: 0, y: 0, isFixed: false };
-        }
-      }
-    }, 10);
+    setTimeout(() => closeContextMenu(e), 10);
   };
   contextMenuHandler = (e) => {
     // Só fechar se não for no item de arquivo
@@ -934,13 +865,7 @@ onMounted(() => {
       setTimeout(() => closeContextMenu(e), 10);
     }
   };
-  keydownHandler = (e) => {
-    handleContextMenuKeydown(e);
-    if (e.key === 'Escape' && showMenu.value) {
-      showMenu.value = null;
-      menuPosition.value = { x: 0, y: 0, isFixed: false };
-    }
-  };
+  keydownHandler = handleContextMenuKeydown;
   
   document.addEventListener('click', clickHandler, true);
   document.addEventListener('contextmenu', contextMenuHandler, true);

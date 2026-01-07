@@ -1,16 +1,15 @@
 /**
  * API Service - Conectado com a API File Manager
  * 
- * BASE_URL: URL do backend (padrão: http://localhost:3000/api)
  * Todas as chamadas de API são centralizadas aqui
  */
+
+import { apiConfig } from '@/config';
 
 // ============================================
 // CONFIGURATION
 // ============================================
-// Em produção, usa caminho relativo (mesmo servidor)
-// Em desenvolvimento, pode usar variável de ambiente ou padrão relativo
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = apiConfig.baseURL;
 
 // ============================================
 // HTTP Client with authentication
